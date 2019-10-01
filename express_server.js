@@ -9,11 +9,12 @@ app.set("view engine", "ejs");
 function generateRandomString(length) { // solution found https://itsolutionstuff.com/post/how-to-generate-random-string-in-javascriptexample.html 
   let text = "";
   let possible = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
+  let string = possible.length;
 
-  for (let x of possible) {
-    text += possible.charAt(Math.floor(Math.random() * possible.length));
-    return text;
+  for (let x = 0; x < length; x++) {
+    text += possible.charAt(Math.floor(Math.random() * string));
   }
+  return text;
 }
 
 const urlDatabase = {
@@ -43,14 +44,22 @@ app.get("/urls", (req, res) => {
 });
 
 app.get("/urls/:shortURL", (req, res) => {
-  let templateVars = { shortURL: req.params.shortURL, longURL: req.params.longURL };
+  let templateVars = { shortURL: req.params.shortURL, longURL: urlDatabase[req.params.shortURL] };
   res.render("urls_show", templateVars);
 });
 
 app.post("/urls", (req, res) => {
-  console.log(req.body); // Log the POST request body to the console
-  res.send("Ok");
+  let shortURL = generateRandomString(6);
+  urlDatabase[shortURL] = req.body.longURL;
+  res.redirect(`/urls/${shortURL}`);
+  console.log(urlDatabase); // Log the POST request body to the console
 });
+
+app.get("/u/:shortURL", (req, res) => { 
+  let shortURL = req.params.shortURL;
+  let longURL = urlDatabase[shortURL];
+  res.redirect(longURL);
+})
 
 app.listen(PORT, () => {
   console.log(`Example app listening on port ${PORT}!`);
