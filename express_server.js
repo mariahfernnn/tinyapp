@@ -1,15 +1,43 @@
 const express = require("express");
-const cookieParser = require('cookie-parser');
-
 const app = express();
-app.use(cookieParser());
-const bodyParser = require("body-parser");
-app.use(bodyParser.urlencoded({extended: true}));
 const PORT = 8080; // default port 8080
+const bodyParser = require("body-parser");
+
+const cookieParser = require('cookie-parser');
+app.use(cookieParser());
+app.use(bodyParser.urlencoded({extended: true}));
+
+const users = {
+  "userRandomID": {
+    id: "userRandomID",
+    email: "user@example.com",
+    password: "purple-monkey-dinosaur"
+  },
+  "user2RandomID": {
+    id: "user2RandomID",
+    email: "user2@example.com",
+    password: "dishwasher-funk"
+  }
+};
+
+function lookUpEmail(email) {
+  // Create an email lookup helper function
+  // Assisted by Ahmed Dauda (mentor)
+  let keys = Object.keys(users);
+
+  for (let key of keys) {
+    if (users[key].email === email) {
+      console.log("Email already exists!");
+      return users[key];
+    } 
+  }
+ return false;
+}
 
 app.set("view engine", "ejs");
 
-function generateRandomString(length) { // solution found https://itsolutionstuff.com/post/how-to-generate-random-string-in-javascriptexample.html 
+function generateRandomString(length) { 
+  // solution found https://itsolutionstuff.com/post/how-to-generate-random-string-in-javascriptexample.html 
   let text = "";
   let possible = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
   let string = possible.length;
@@ -38,30 +66,38 @@ app.get("/hello", (req, res) => {
 });
 
 app.get("/urls/new", (req, res) => {
+  let userID = req.cookies["user_id"];
+  let user = users[userID];
   let templateVars = {
-    username: req.cookies["username"]
+    user: user
   };
   res.render("urls_new", templateVars);
 });
 
 app.get("/urls", (req, res) => {
+  let userID = req.cookies["user_id"];
+  let user = users[userID];
   let templateVars = {
-    username: req.cookies["username"],
+    user: user,
     urls: urlDatabase 
   };
   res.render("urls_index", templateVars);
 });
 
+
 app.get("/urls/:shortURL", (req, res) => {
+  let userID = req.cookies["user_id"];
+  let user = users[userID];
   let templateVars = { 
     shortURL: req.params.shortURL, 
     longURL: urlDatabase[req.params.shortURL],
-    username: req.cookies["username"]
-   };
+    user: user
+  };
   res.render("urls_show", templateVars);
 });
 
-app.post("/urls", (req, res) => {
+app.post("/urls", (req, res) => { 
+  // Generate a random shortURL for a longURL
   let shortURL = generateRandomString(6);
   urlDatabase[shortURL] = req.body.longURL;
   res.redirect(`/urls/${shortURL}`);
@@ -82,8 +118,9 @@ app.post("/urls/:shortURL/delete", (req, res) => {
 app.get("/urls/:shortURL/edit", (req, res) => {  
   let shortURL = req.params.shortURL;
   let longURL = urlDatabase[shortURL];
-  let username = req.cookies["username"];
-  res.render("urls_show", {shortURL, longURL, username} );
+  let userID = req.cookies["user_id"];
+  let user = users[userID];
+  res.render("urls_show", {shortURL, longURL, user} );
 });
 
 app.post("/urls/:shortURL", (req, res) => { 
@@ -91,20 +128,66 @@ app.post("/urls/:shortURL", (req, res) => {
   res.redirect("/urls/" + req.params.shortURL);
 });
 
-app.post("/login", (req, res) => {
-  res.cookie('username', req.body.username).redirect("/urls/");; 
-});
-
-app.get("/login", (req, res) => {
+app.get("/register", (req, res) => {  
+  // Create a GET /register endpoint, which returns the register template you created
+  let userID = req.cookies["user_id"];
+  let user = users[userID];
   let templateVars = {
     urls: [],
-    username: req.cookies["username"]
+    user: user
   };
-  res.render("urls_index", templateVars);
+  res.render("urls_register", templateVars);
+});
+
+app.post("/register", (req, res) => {  
+  // Create a POST /register endpoint - add a new user object to the global users obj
+
+  let existingUser = lookUpEmail(req.body.email);
+  
+  if (existingUser || req.body.email === "" || req.body.password === "") {
+    // Assisted by Ahmed Dauda (mentor)
+    res.status(400).send("Email already exists!");
+    } else {
+      let userRandomID = generateRandomString(6);
+      users[userRandomID] = {
+        "id": userRandomID,
+        "email": req.body.email,
+        "password": req.body.password
+      };
+      res.cookie("user_id", userRandomID);
+      res.redirect("/urls");
+    }
+});
+
+app.get("/login", (req, res) => {  
+  // Create a GET /login endpoint, which returns the login template you created
+  // Assisted by Spiro Sideris (mentor)
+  let userID = req.cookies["user_id"];
+  let user = users[userID]; // Lookup the user obj in the users obj using the user_id value
+
+  let templateVars = {
+    urls: [],
+    user: user,
+  };
+  res.render("urls_login", templateVars);
+});
+
+app.post("/login", (req, res) => {
+  let existingUser = lookUpEmail(req.body.email);
+
+  if (existingUser) {
+    if (existingUser.password === req.body.password) {
+      res.cookie("user_id", existingUser.id).redirect("/urls");
+    } else {
+      res.status(403).send("Passwords do not match!");
+    }
+  } else {
+    res.status(403).send("Email cannot be found!");
+  }
 });
 
 app.post("/logout", (req, res) => {
-  res.clearCookie("username").redirect("/urls/");
+  res.clearCookie("user_id").redirect("/urls/");
 });
 
 app.listen(PORT, () => {
