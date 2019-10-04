@@ -209,7 +209,6 @@ app.get("/login", (req, res) => {
 // Assisted by Will Hawkins(mentor) - adding parameter to set cookie
 app.post("/login", (req, res) => {
   let existingUser = getUserByEmail(req.body.email, users);
-  console.log(existingUser.password);
 
   if (existingUser) {
     if (bcrypt.compareSync(req.body.password, existingUser.password)) {
