@@ -49,8 +49,9 @@ function generateRandomString(length) {
 }
 
 const urlDatabase = {
-  "b2xVn2": "http://www.lighthouselabs.ca",
-  "9sm5xK": "http://www.google.com"
+  // Update url database - change the value to an obj that has longURL and userID keys itself
+  b6UTxQ: { longURL: "https://www.tsn.ca", userID: "aJ48lW" },
+  i3BoGr: { longURL: "https://www.google.ca", userID: "aJ48lW" }
 };
 
 app.get("/", (req, res) => {
@@ -65,71 +66,110 @@ app.get("/hello", (req, res) => {
   res.send("<html><body>Hello <b>World</b></body></html>\n");
 });
 
+// Modify so only registered and logged in users can create new tiny URLs
 app.get("/urls/new", (req, res) => {
   let userID = req.cookies["user_id"];
   let user = users[userID];
   let templateVars = {
     user: user
   };
+  
+  if (user) {
   res.render("urls_new", templateVars);
+  } else {
+    res.redirect("/login");
+  }
 });
 
+// Filter the urlDatabase to compare the userID with the logged-in user's ID
+// Assisted by Andrew Matte(mentor) - added the shortURL into the data obj
+function urlsForUser(id) {
+  let myURL = [];
+  for (let key in urlDatabase) {
+    let userID = urlDatabase[key].userID;
+    if(id === userID) {
+      data = urlDatabase[key];
+      data.shortURL = key;
+      myURL.push(data);
+
+    }
+  }
+  return myURL;
+}
+
+// My URLs
 app.get("/urls", (req, res) => {
   let userID = req.cookies["user_id"];
+  if(!userID) {
+  res.status(401).send("Login first!");
+  return;
+  } 
+  let myURL = urlsForUser(userID);
   let user = users[userID];
   let templateVars = {
-    user: user,
-    urls: urlDatabase 
-  };
-  res.render("urls_index", templateVars);
+    urls: myURL,
+    user: user
+  }
+   res.render("urls_index", templateVars);
 });
 
-
 app.get("/urls/:shortURL", (req, res) => {
-  let userID = req.cookies["user_id"];
-  let user = users[userID];
   let templateVars = { 
     shortURL: req.params.shortURL, 
-    longURL: urlDatabase[req.params.shortURL],
-    user: user
+    longURL: urlDatabase[req.params.shortURL].longURL,
+    user: users[req.cookies["user_id"]]
   };
+  
   res.render("urls_show", templateVars);
 });
 
+// CREATE NEW URL: Generate a random shortURL for a longURL
 app.post("/urls", (req, res) => { 
-  // Generate a random shortURL for a longURL
   let shortURL = generateRandomString(6);
-  urlDatabase[shortURL] = req.body.longURL;
+  let obj = {
+    longURL: req.body.longURL,
+    userID: req.cookies.user_id
+  };
+  urlDatabase[shortURL] = obj;
   res.redirect(`/urls/${shortURL}`);
-  console.log(urlDatabase); // Log the POST request body to the console
+  console.log(obj);
 });
 
 app.get("/u/:shortURL", (req, res) => { 
   let shortURL = req.params.shortURL;
-  let longURL = urlDatabase[shortURL];
+  let longURL = urlDatabase[shortURL].longURL;
   res.redirect(longURL);
 });
 
 app.post("/urls/:shortURL/delete", (req, res) => {
-  delete urlDatabase[req.params.shortURL];
+  // Assisted by Ben Hare(mentor)
+  let urlObj = urlDatabase[req.params.shortURL];
+  if (urlObj.userID === req.cookies.user_id) {
+    delete urlDatabase[req.params.shortURL];
+  }
   res.redirect("/urls");
 });
 
 app.get("/urls/:shortURL/edit", (req, res) => {  
   let shortURL = req.params.shortURL;
-  let longURL = urlDatabase[shortURL];
+  let longURL = urlDatabase[shortURL].longURL;
+  urlDatabase[shortURL] = longURL;
   let userID = req.cookies["user_id"];
   let user = users[userID];
+  
   res.render("urls_show", {shortURL, longURL, user} );
 });
 
 app.post("/urls/:shortURL", (req, res) => { 
-  urlDatabase[req.params.shortURL] = req.body.newURL;
+  let urlObj = urlDatabase[req.params.shortURL];
+  if (urlObj.userID === req.cookies.user_id) {
+    urlDatabase[req.params.shortURL].longURL = req.body.newURL;
+  }
   res.redirect("/urls/" + req.params.shortURL);
 });
 
+// Create a GET /register endpoint, which returns the register template you created
 app.get("/register", (req, res) => {  
-  // Create a GET /register endpoint, which returns the register template you created
   let userID = req.cookies["user_id"];
   let user = users[userID];
   let templateVars = {
@@ -139,8 +179,8 @@ app.get("/register", (req, res) => {
   res.render("urls_register", templateVars);
 });
 
+// Create a POST /register endpoint - add a new user object to the global users obj
 app.post("/register", (req, res) => {  
-  // Create a POST /register endpoint - add a new user object to the global users obj
 
   let existingUser = lookUpEmail(req.body.email);
   
@@ -159,8 +199,8 @@ app.post("/register", (req, res) => {
     }
 });
 
+// Create a GET /login endpoint, which returns the login template you created
 app.get("/login", (req, res) => {  
-  // Create a GET /login endpoint, which returns the login template you created
   // Assisted by Spiro Sideris (mentor)
   let userID = req.cookies["user_id"];
   let user = users[userID]; // Lookup the user obj in the users obj using the user_id value
@@ -173,6 +213,7 @@ app.get("/login", (req, res) => {
 });
 
 app.post("/login", (req, res) => {
+  // Assisted by Will Hawkins(mentor) - adding parameter to set cookie
   let existingUser = lookUpEmail(req.body.email);
 
   if (existingUser) {
@@ -187,7 +228,7 @@ app.post("/login", (req, res) => {
 });
 
 app.post("/logout", (req, res) => {
-  res.clearCookie("user_id").redirect("/urls/");
+  res.clearCookie("user_id").redirect("/login");
 });
 
 app.listen(PORT, () => {
