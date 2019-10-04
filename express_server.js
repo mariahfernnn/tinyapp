@@ -1,11 +1,17 @@
 const express = require("express");
+const cookieSession = require("cookie-session");
 const app = express();
 const PORT = 8080; // default port 8080
 const bodyParser = require("body-parser");
 const bcrypt = require("bcrypt");
+const { getUserByEmail } = require("./helpers");
 
-const cookieParser = require('cookie-parser');
-app.use(cookieParser());
+app.use(cookieSession( {
+  name: 'session',
+  keys: ["key"],
+  maxAge: 24 * 60 * 60 * 1000 // 24 hours
+}))
+
 app.use(bodyParser.urlencoded({extended: true}));
 
 const users = {
@@ -21,24 +27,10 @@ const users = {
   }
 };
 
-function lookUpEmail(email) {
-  // Create an email lookup helper function
-  // Assisted by Ahmed Dauda (mentor)
-  let keys = Object.keys(users);
-
-  for (let key of keys) {
-    if (users[key].email === email) {
-      console.log("Email already exists!");
-      return users[key];
-    } 
-  }
- return false;
-}
-
 app.set("view engine", "ejs");
 
 function generateRandomString(length) { 
-  // solution found https://itsolutionstuff.com/post/how-to-generate-random-string-in-javascriptexample.html 
+  // solution found: https://itsolutionstuff.com/post/how-to-generate-random-string-in-javascriptexample.html 
   let text = "";
   let possible = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
   let string = possible.length;
@@ -49,8 +41,8 @@ function generateRandomString(length) {
   return text;
 }
 
+// Update url database - change the value to an obj that has longURL and userID keys itself
 const urlDatabase = {
-  // Update url database - change the value to an obj that has longURL and userID keys itself
   b6UTxQ: { longURL: "https://www.tsn.ca", userID: "aJ48lW" },
   i3BoGr: { longURL: "https://www.google.ca", userID: "aJ48lW" }
 };
@@ -69,7 +61,7 @@ app.get("/hello", (req, res) => {
 
 // Modify so only registered and logged in users can create new tiny URLs
 app.get("/urls/new", (req, res) => {
-  let userID = req.cookies["user_id"];
+  let userID = req.session.user_id;
   let user = users[userID];
   let templateVars = {
     user: user
@@ -100,7 +92,7 @@ function urlsForUser(id) {
 
 // My URLs
 app.get("/urls", (req, res) => {
-  let userID = req.cookies["user_id"];
+  let userID = req.session.user_id;
   if(!userID) {
   res.status(401).send("Login first!");
   return;
@@ -118,18 +110,19 @@ app.get("/urls/:shortURL", (req, res) => {
   let templateVars = { 
     shortURL: req.params.shortURL, 
     longURL: urlDatabase[req.params.shortURL].longURL,
-    user: users[req.cookies["user_id"]]
+    user: users[req.session.user_id]
   };
   
   res.render("urls_show", templateVars);
 });
 
-// CREATE NEW URL: Generate a random shortURL for a longURL
+// Create new URL: Generate a random shortURL for a longURL
+// Assisted by Spiro Sideris (mentor) - assigning the longURL value to an obj
 app.post("/urls", (req, res) => { 
   let shortURL = generateRandomString(6);
   let obj = {
     longURL: req.body.longURL,
-    userID: req.cookies.user_id
+    userID: req.session.user_id
   };
   urlDatabase[shortURL] = obj;
   res.redirect(`/urls/${shortURL}`);
@@ -142,10 +135,10 @@ app.get("/u/:shortURL", (req, res) => {
   res.redirect(longURL);
 });
 
+// Assisted by Ben Hare(mentor)
 app.post("/urls/:shortURL/delete", (req, res) => {
-  // Assisted by Ben Hare(mentor)
   let urlObj = urlDatabase[req.params.shortURL];
-  if (urlObj.userID === req.cookies.user_id) {
+  if (urlObj.userID === req.session.user_id) {
     delete urlDatabase[req.params.shortURL];
   }
   res.redirect("/urls");
@@ -155,7 +148,7 @@ app.get("/urls/:shortURL/edit", (req, res) => {
   let shortURL = req.params.shortURL;
   let longURL = urlDatabase[shortURL].longURL;
   urlDatabase[shortURL] = longURL;
-  let userID = req.cookies["user_id"];
+  let userID = req.session.user_id;
   let user = users[userID];
   
   res.render("urls_show", {shortURL, longURL, user} );
@@ -163,7 +156,7 @@ app.get("/urls/:shortURL/edit", (req, res) => {
 
 app.post("/urls/:shortURL", (req, res) => { 
   let urlObj = urlDatabase[req.params.shortURL];
-  if (urlObj.userID === req.cookies.user_id) {
+  if (urlObj.userID === req.session.user_id) {
     urlDatabase[req.params.shortURL].longURL = req.body.newURL;
   }
   res.redirect("/urls/" + req.params.shortURL);
@@ -171,7 +164,7 @@ app.post("/urls/:shortURL", (req, res) => {
 
 // Create a GET /register endpoint, which returns the register template you created
 app.get("/register", (req, res) => {  
-  let userID = req.cookies["user_id"];
+  let userID = req.session.user_id;
   let user = users[userID];
   let templateVars = {
     urls: [],
@@ -182,11 +175,11 @@ app.get("/register", (req, res) => {
 
 // Create a POST /register endpoint - add a new user object to the global users obj
 app.post("/register", (req, res) => {  
-
-  let existingUser = lookUpEmail(req.body.email);
   
+  let existingUser = getUserByEmail(req.body.email, users);
+  
+  // Assisted by Ahmed Dauda (mentor)
   if (existingUser || req.body.email === "" || req.body.password === "") {
-    // Assisted by Ahmed Dauda (mentor)
     res.status(400).send("Email already exists!");
     } else {
       let userRandomID = generateRandomString(6);
@@ -195,15 +188,15 @@ app.post("/register", (req, res) => {
         "email": req.body.email,
         "password": bcrypt.hashSync(req.body.password, 10)
       };
-      res.cookie("user_id", userRandomID);
+      req.session.user_id = userRandomID;
       res.redirect("/urls");
     }
 });
 
 // Create a GET /login endpoint, which returns the login template you created
+// Assisted by Spiro Sideris (mentor)
 app.get("/login", (req, res) => {  
-  // Assisted by Spiro Sideris (mentor)
-  let userID = req.cookies["user_id"];
+  let userID = req.session.user_id;
   let user = users[userID]; // Lookup the user obj in the users obj using the user_id value
 
   let templateVars = {
@@ -213,14 +206,15 @@ app.get("/login", (req, res) => {
   res.render("urls_login", templateVars);
 });
 
+// Assisted by Will Hawkins(mentor) - adding parameter to set cookie
 app.post("/login", (req, res) => {
-  // Assisted by Will Hawkins(mentor) - adding parameter to set cookie
-  let existingUser = lookUpEmail(req.body.email);
+  let existingUser = getUserByEmail(req.body.email, users);
   console.log(existingUser.password);
 
   if (existingUser) {
     if (bcrypt.compareSync(req.body.password, existingUser.password)) {
-      res.cookie("user_id", existingUser.id).redirect("/urls");
+      req.session.user_id = existingUser.id;
+      res.redirect("/urls");
     } else {
       res.status(403).send("Passwords do not match!");
     }
@@ -230,7 +224,8 @@ app.post("/login", (req, res) => {
 });
 
 app.post("/logout", (req, res) => {
-  res.clearCookie("user_id").redirect("/login");
+  req.session = null;
+  res.redirect("/login");
 });
 
 app.listen(PORT, () => {
