@@ -2,6 +2,7 @@ const express = require("express");
 const app = express();
 const PORT = 8080; // default port 8080
 const bodyParser = require("body-parser");
+const bcrypt = require("bcrypt");
 
 const cookieParser = require('cookie-parser');
 app.use(cookieParser());
@@ -192,7 +193,7 @@ app.post("/register", (req, res) => {
       users[userRandomID] = {
         "id": userRandomID,
         "email": req.body.email,
-        "password": req.body.password
+        "password": bcrypt.hashSync(req.body.password, 10)
       };
       res.cookie("user_id", userRandomID);
       res.redirect("/urls");
@@ -215,9 +216,10 @@ app.get("/login", (req, res) => {
 app.post("/login", (req, res) => {
   // Assisted by Will Hawkins(mentor) - adding parameter to set cookie
   let existingUser = lookUpEmail(req.body.email);
+  console.log(existingUser.password);
 
   if (existingUser) {
-    if (existingUser.password === req.body.password) {
+    if (bcrypt.compareSync(req.body.password, existingUser.password)) {
       res.cookie("user_id", existingUser.id).redirect("/urls");
     } else {
       res.status(403).send("Passwords do not match!");
